@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jenkins-restore
+spec:
+  template:
+    spec:
+      containers:
+      - name: jenkins-restore
+        env:
+        - name: JENKINS_POD
+          value: <POD_NAME>
+        - name: JENKINS_CONTAINER
+          value: <CONTAINER_NAME>
+        - name: JENKINS_BACKUP_PATH
+          value: <BACKUP_PATH>

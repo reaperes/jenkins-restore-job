@@ -1,0 +1,73 @@
+### Reference from: https://github.com/jenkinsci/helm-charts/tree/main/charts/jenkins#restore-from-backup
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins-restore
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::12345678:role/jenkins-restore  # IRSA
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-restore
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-restore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jenkins-restore
+subjects:
+- kind: ServiceAccount
+  name: jenkins-restore
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jenkins-restore
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: jenkins-restore
+      securityContext:
+        runAsUser: 0
+        # fsGroup:  # Only support for 1.19+
+      containers:
+      - name: jenkins-restore
+        image: reaperes/skbn:0.4.2-irsa  # IRSA
+        command: ["skbn"]
+        args:
+        - cp
+        - --src
+        - s3://$(JENKINS_BACKUP_BUCKET)$(JENKINS_BACKUP_PATH)
+        - --dst
+        - k8s://$(NAMESPACE)/$(JENKINS_POD)/$(JENKINS_CONTAINER)$(JENKINS_HOME)
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: AWS_REGION
+          value: ap-northeast-2
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: JENKINS_POD
+          value: <VALUE_FROM_KUSTOMIZE>
+        - name: JENKINS_CONTAINER
+          value: <VALUE_FROM_KUSTOMIZE>
+        - name: JENKINS_HOME
+          value: /var/jenkins_home
+        - name: JENKINS_BACKUP_BUCKET
+          value: jenkins-backup-bucket
+        - name: JENKINS_BACKUP_PATH
+          value: <VALUE_FROM_KUSTOMIZE>
